@@ -1,392 +1,418 @@
-const DOWNLOAD_BUTTON_ID = 'chatgpt-save-download-button';
-const STYLE_ELEMENT_ID = 'chatgpt-save-style';
-const SHARE_BUTTON_SELECTOR = 'button[data-testid="share-chat-button"]';
-const DROPDOWN_ID = 'chatgpt-save-download-dropdown';
+const DOWNLOAD_FORMATS = Object.freeze({
+  json: 'json',
+  markdown: 'markdown'
+});
 
-let activeDropdown = null;
-let activeAnchor = null;
-let detachDocumentHandlers = null;
-let accessTokenCache = null;
-let accessTokenPromise = null;
+class DownloadUI {
+  static SHARE_BUTTON_SELECTOR = 'button[data-testid="share-chat-button"]';
+  static DOWNLOAD_BUTTON_ID = 'chatgpt-save-download-button';
+  static STYLE_ID = 'chatgpt-save-style';
+  static DROPDOWN_ID = 'chatgpt-save-download-dropdown';
 
-init();
-
-function init() {
-  injectStyles();
-  ensureDownloadButton();
-  observeShareButton();
-}
-
-function injectStyles() {
-  if (document.getElementById(STYLE_ELEMENT_ID)) {
-    return;
+  constructor(onFormatSelected) {
+    this.onFormatSelected = onFormatSelected;
+    this.dropdown = null;
+    this.dropdownAnchor = null;
+    this.detachDropdownListeners = null;
   }
 
-  const style = document.createElement('style');
-  style.id = STYLE_ELEMENT_ID;
-  style.textContent = `
-    #${DOWNLOAD_BUTTON_ID} svg {
-      transform: rotate(180deg);
+  init() {
+    this.injectStyles();
+    this.attachDownloadButton();
+    this.observeShareButton();
+  }
+
+  injectStyles() {
+    if (document.getElementById(DownloadUI.STYLE_ID)) {
+      return;
     }
-  `;
 
-  document.head.appendChild(style);
-}
-
-function observeShareButton() {
-  const observer = new MutationObserver(() => {
-    ensureDownloadButton();
-  });
-
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true
-  });
-}
-
-function ensureDownloadButton() {
-  const shareButton = document.querySelector(SHARE_BUTTON_SELECTOR);
-  if (!shareButton) {
-    return;
-  }
-
-  const parent = shareButton.parentElement;
-  if (!parent) {
-    return;
-  }
-
-  if (parent.querySelector(`#${DOWNLOAD_BUTTON_ID}`)) {
-    return;
-  }
-
-  const downloadButton = cloneShareButton(shareButton);
-  parent.insertBefore(downloadButton, shareButton.nextSibling);
-}
-
-function cloneShareButton(shareButton) {
-  const downloadButton = shareButton.cloneNode(true);
-  downloadButton.id = DOWNLOAD_BUTTON_ID;
-  downloadButton.setAttribute('aria-label', 'Download');
-  downloadButton.dataset.testid = 'download-chat-button';
-
-  const labelContainer = downloadButton.querySelector('.flex');
-  if (labelContainer) {
-    replaceLabelText(labelContainer, 'Download');
-  }
-
-  const icon = downloadButton.querySelector('svg');
-  if (icon) {
-    icon.setAttribute('aria-label', 'Download icon');
-  }
-
-  downloadButton.addEventListener('click', event => {
-    event.preventDefault();
-    event.stopPropagation();
-    toggleDropdown(downloadButton);
-  });
-
-  return downloadButton;
-}
-
-function replaceLabelText(container, text) {
-  let replaced = false;
-
-  for (const node of Array.from(container.childNodes)) {
-    if (node.nodeType === Node.TEXT_NODE) {
-      node.textContent = text;
-      replaced = true;
-    }
-  }
-
-  if (!replaced) {
-    container.appendChild(document.createTextNode(text));
-  }
-}
-
-function toggleDropdown(anchor) {
-  if (activeDropdown && activeAnchor === anchor) {
-    closeDropdown();
-    return;
-  }
-
-  openDropdown(anchor);
-}
-
-function openDropdown(anchor) {
-  const dropdown = getDropdownElement();
-  dropdown.hidden = false;
-  dropdown.style.visibility = 'hidden';
-  positionDropdown(anchor, dropdown);
-  dropdown.style.visibility = '';
-  dropdown.setAttribute('data-state', 'open');
-
-  activeDropdown = dropdown;
-  activeAnchor = anchor;
-
-  if (!detachDocumentHandlers) {
-    const handleDocumentClick = event => {
-      if (!activeDropdown) {
-        return;
+    const style = document.createElement('style');
+    style.id = DownloadUI.STYLE_ID;
+    style.textContent = `
+      #${DownloadUI.DOWNLOAD_BUTTON_ID} svg {
+        transform: rotate(180deg);
       }
+    `;
 
-      if (activeAnchor?.contains(event.target) || activeDropdown.contains(event.target)) {
-        return;
-      }
-
-      closeDropdown();
-    };
-
-    const handleKeydown = event => {
-      if (event.key === 'Escape') {
-        closeDropdown();
-      }
-    };
-
-    document.addEventListener('click', handleDocumentClick, true);
-    document.addEventListener('keydown', handleKeydown);
-
-    detachDocumentHandlers = () => {
-      document.removeEventListener('click', handleDocumentClick, true);
-      document.removeEventListener('keydown', handleKeydown);
-      detachDocumentHandlers = null;
-    };
-  }
-}
-
-function closeDropdown() {
-  if (!activeDropdown) {
-    return;
+    document.head.appendChild(style);
   }
 
-  activeDropdown.hidden = true;
-  activeDropdown.setAttribute('data-state', 'closed');
-  activeDropdown = null;
-  activeAnchor = null;
+  observeShareButton() {
+    const observer = new MutationObserver(() => this.attachDownloadButton());
 
-  if (detachDocumentHandlers) {
-    detachDocumentHandlers();
-  }
-}
-
-function getDropdownElement() {
-  let dropdown = document.getElementById(DROPDOWN_ID);
-  if (dropdown) {
-    return dropdown;
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
   }
 
-  dropdown = buildDropdownElement();
-  document.body.appendChild(dropdown);
-  return dropdown;
-}
-
-function buildDropdownElement() {
-  const dropdown = document.createElement('div');
-  dropdown.id = DROPDOWN_ID;
-  dropdown.setAttribute('role', 'menu');
-  dropdown.setAttribute('data-state', 'closed');
-  dropdown.className = 'z-50 absolute rounded-2xl bg-token-main-surface-primary dark:bg-[#353535] shadow-long py-1.5 border border-token-border-light min-w-[180px] text-token-text-primary';
-  dropdown.hidden = true;
-
-  const container = document.createElement('div');
-  container.setAttribute('role', 'group');
-  container.className = 'flex flex-col gap-1';
-  dropdown.appendChild(container);
-
-  container.appendChild(createMenuItem('JSON'));
-  container.appendChild(createMenuItem('Markdown'));
-
-  return dropdown;
-}
-
-function createMenuItem(label) {
-  const item = document.createElement('button');
-  item.type = 'button';
-  item.setAttribute('role', 'menuitem');
-  item.dataset.option = label.toLowerCase();
-  item.className = '__menu-item flex w-full items-center gap-1.5 px-4 py-2 text-sm text-left hover:bg-token-main-surface-secondary rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-token-border-light';
-  item.textContent = label;
-
-  item.addEventListener('click', event => {
-    event.preventDefault();
-    event.stopPropagation();
-    closeDropdown();
-    handleDownloadSelection(item.dataset.option);
-  });
-
-  return item;
-}
-
-function positionDropdown(anchor, dropdown) {
-  const rect = anchor.getBoundingClientRect();
-  const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
-  const scrollX = window.scrollX || document.documentElement.scrollLeft || 0;
-
-  dropdown.style.top = `${rect.bottom + scrollY + 8}px`;
-  dropdown.style.left = `${rect.right + scrollX - dropdown.offsetWidth}px`;
-}
-
-async function handleDownloadSelection(format) {
-  try {
-    const conversationId = extractConversationIdFromLocation();
-    if (!conversationId) {
-      throw new Error('Unable to determine conversation id from URL.');
+  attachDownloadButton() {
+    const shareButton = document.querySelector(DownloadUI.SHARE_BUTTON_SELECTOR);
+    if (!shareButton) {
+      return;
     }
 
-    const conversation = await fetchConversation(conversationId);
-    if (!conversation || typeof conversation !== 'object') {
-      throw new Error('Conversation payload was empty.');
+    const parent = shareButton.parentElement;
+    if (!parent || parent.querySelector(`#${DownloadUI.DOWNLOAD_BUTTON_ID}`)) {
+      return;
     }
 
-    chrome.runtime.sendMessage(
-      {
-        type: 'CHATGPT_SAVE_DOWNLOAD_REQUEST',
-        payload: {
-          format,
-          conversation
-        }
-      },
-      response => {
-        const runtimeError = chrome.runtime.lastError;
-        if (runtimeError) {
-          console.warn('ChatGPT Save: download request error.', runtimeError.message);
+    const downloadButton = this.cloneShareButton(shareButton);
+    parent.insertBefore(downloadButton, shareButton.nextSibling);
+  }
+
+  cloneShareButton(referenceButton) {
+    const clone = referenceButton.cloneNode(true);
+    clone.id = DownloadUI.DOWNLOAD_BUTTON_ID;
+    clone.setAttribute('aria-label', 'Download conversation');
+    clone.dataset.testid = 'download-chat-button';
+
+    const label = clone.querySelector('.flex');
+    if (label) {
+      this.replaceLabel(label, 'Download');
+    }
+
+    const icon = clone.querySelector('svg');
+    if (icon) {
+      icon.setAttribute('aria-label', 'Download icon');
+    }
+
+    clone.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.toggleDropdown(clone);
+    });
+
+    return clone;
+  }
+
+  replaceLabel(container, text) {
+    let replaced = false;
+
+    for (const node of Array.from(container.childNodes)) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        node.textContent = text;
+        replaced = true;
+      }
+    }
+
+    if (!replaced) {
+      container.appendChild(document.createTextNode(text));
+    }
+  }
+
+  toggleDropdown(anchor) {
+    if (this.dropdown && this.dropdownAnchor === anchor) {
+      this.closeDropdown();
+      return;
+    }
+
+    this.openDropdown(anchor);
+  }
+
+  openDropdown(anchor) {
+    const dropdown = this.ensureDropdown();
+    dropdown.hidden = false;
+    dropdown.style.visibility = 'hidden';
+    this.positionDropdown(anchor, dropdown);
+    dropdown.style.visibility = '';
+    dropdown.setAttribute('data-state', 'open');
+
+    this.dropdown = dropdown;
+    this.dropdownAnchor = anchor;
+
+    if (!this.detachDropdownListeners) {
+      const handleDocumentClick = event => {
+        if (!this.dropdown) {
           return;
         }
 
-        if (!response?.ok) {
-          console.warn('ChatGPT Save: download failed.', response?.error);
+        if (this.dropdownAnchor?.contains(event.target) || this.dropdown.contains(event.target)) {
+          return;
         }
-      }
-    );
-  } catch (error) {
-    console.warn('ChatGPT Save: failed to prepare download.', error);
-  }
-}
 
-function extractConversationIdFromLocation() {
-  const url = new URL(window.location.href);
+        this.closeDropdown();
+      };
 
-  // Typical path: /c/<conversationId>
-  const segments = url.pathname.split('/').filter(Boolean);
-  const conversationIndex = segments.indexOf('c');
-  if (conversationIndex !== -1 && segments.length > conversationIndex + 1) {
-    return segments[conversationIndex + 1];
-  }
+      const handleEscape = event => {
+        if (event.key === 'Escape') {
+          this.closeDropdown();
+        }
+      };
 
-  if (segments.length >= 1) {
-    const candidate = segments[segments.length - 1];
-    if (isUuid(candidate)) {
-      return candidate;
+      document.addEventListener('click', handleDocumentClick, true);
+      document.addEventListener('keydown', handleEscape);
+
+      this.detachDropdownListeners = () => {
+        document.removeEventListener('click', handleDocumentClick, true);
+        document.removeEventListener('keydown', handleEscape);
+        this.detachDropdownListeners = null;
+      };
     }
   }
 
-  const searchParams = url.searchParams;
-  const queryConversation = searchParams.get('conversationId') || searchParams.get('conversation_id');
-  if (queryConversation) {
-    return queryConversation;
+  closeDropdown() {
+    if (!this.dropdown) {
+      return;
+    }
+
+    this.dropdown.hidden = true;
+    this.dropdown.setAttribute('data-state', 'closed');
+    this.dropdown = null;
+    this.dropdownAnchor = null;
+
+    if (this.detachDropdownListeners) {
+      this.detachDropdownListeners();
+    }
   }
 
-  return null;
+  ensureDropdown() {
+    let dropdown = document.getElementById(DownloadUI.DROPDOWN_ID);
+    if (dropdown) {
+      return dropdown;
+    }
+
+    dropdown = document.createElement('div');
+    dropdown.id = DownloadUI.DROPDOWN_ID;
+    dropdown.setAttribute('role', 'menu');
+    dropdown.setAttribute('data-state', 'closed');
+    dropdown.className = 'z-50 absolute rounded-2xl bg-token-main-surface-primary dark:bg-[#353535] shadow-long py-1.5 border border-token-border-light min-w-[180px] text-token-text-primary';
+    dropdown.hidden = true;
+
+    const group = document.createElement('div');
+    group.setAttribute('role', 'group');
+    group.className = 'flex flex-col gap-1';
+
+    group.appendChild(this.createDropdownItem('JSON', DOWNLOAD_FORMATS.json));
+    group.appendChild(this.createDropdownItem('Markdown', DOWNLOAD_FORMATS.markdown));
+
+    dropdown.appendChild(group);
+    document.body.appendChild(dropdown);
+
+    return dropdown;
+  }
+
+  createDropdownItem(label, format) {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.setAttribute('role', 'menuitem');
+    item.dataset.option = format;
+    item.className = '__menu-item flex w-full items-center gap-1.5 px-4 py-2 text-sm text-left hover:bg-token-main-surface-secondary rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-token-border-light';
+    item.textContent = label;
+
+    item.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.closeDropdown();
+      this.onFormatSelected(format);
+    });
+
+    return item;
+  }
+
+  positionDropdown(anchor, dropdown) {
+    const rect = anchor.getBoundingClientRect();
+    const offsetY = window.scrollY || document.documentElement.scrollTop || 0;
+    const offsetX = window.scrollX || document.documentElement.scrollLeft || 0;
+
+    dropdown.style.top = `${rect.bottom + offsetY + 8}px`;
+    dropdown.style.left = `${rect.right + offsetX - dropdown.offsetWidth}px`;
+  }
 }
 
-function isUuid(value) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+class ConversationLocator {
+  static currentConversationId() {
+    const url = new URL(window.location.href);
+    const segments = url.pathname.split('/').filter(Boolean);
+    const deepLinkIndex = segments.indexOf('c');
+
+    if (deepLinkIndex !== -1 && segments.length > deepLinkIndex + 1) {
+      return segments[deepLinkIndex + 1];
+    }
+
+    if (segments.length) {
+      const lastSegment = segments[segments.length - 1];
+      if (ConversationLocator.isUuid(lastSegment)) {
+        return lastSegment;
+      }
+    }
+
+    return url.searchParams.get('conversationId') || url.searchParams.get('conversation_id');
+  }
+
+  static isUuid(value) {
+    return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+  }
 }
 
-async function fetchConversation(conversationId) {
-  const endpoint = `https://chatgpt.com/backend-api/conversation/${conversationId}`;
-  const [accessToken, deviceId] = await Promise.all([
-    getAccessToken(),
-    getDeviceId()
-  ]);
+class AuthManager {
+  static SESSION_ENDPOINT = 'https://chatgpt.com/api/auth/session';
 
-  if (!accessToken) {
-    throw new Error('Missing access token. Please ensure you are logged in.');
+  constructor() {
+    this.accessToken = null;
+    this.pendingAccessToken = null;
   }
 
-  const headers = new Headers({
-    accept: 'application/json',
-    authorization: `Bearer ${accessToken}`,
-    'x-openai-assistant-app-id': 'chat.openai.com'
-  });
+  async getAccessToken() {
+    if (this.accessToken) {
+      return this.accessToken;
+    }
 
-  if (deviceId) {
-    headers.set('oai-device-id', deviceId);
+    if (!this.pendingAccessToken) {
+      this.pendingAccessToken = this.requestAccessToken()
+        .then(token => {
+          this.accessToken = token;
+          return token;
+        })
+        .catch(error => {
+          this.pendingAccessToken = null;
+          throw error;
+        });
+    }
+
+    return this.pendingAccessToken;
   }
 
-  const response = await fetch(endpoint, {
-    method: 'GET',
-    credentials: 'include',
-    headers
-  });
-
-  if (!response.ok) {
-    throw new Error(`Conversation request failed: ${response.status}`);
-  }
-
-  return response.json();
-}
-
-async function getAccessToken() {
-  if (accessTokenCache) {
-    return accessTokenCache;
-  }
-
-  if (!accessTokenPromise) {
-    accessTokenPromise = fetch('https://chatgpt.com/api/auth/session', {
+  async requestAccessToken() {
+    const response = await fetch(AuthManager.SESSION_ENDPOINT, {
       method: 'GET',
       credentials: 'include',
-      headers: {
-        accept: 'application/json'
-      }
-    })
-      .then(response => {
-        if (!response.ok) {
-          throw new Error(`Session request failed: ${response.status}`);
-        }
-        return response.json();
-      })
-      .then(data => {
-        const token = data?.accessToken || null;
-        if (!token) {
-          throw new Error('Session response missing access token.');
-        }
-        accessTokenCache = token;
-        return token;
-      })
-      .catch(error => {
-        accessTokenPromise = null;
-        throw error;
-      });
+      headers: { accept: 'application/json' }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Session request failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const token = data?.accessToken;
+    if (!token) {
+      throw new Error('Session response missing access token.');
+    }
+
+    return token;
   }
 
-  return accessTokenPromise;
+  async getDeviceId() {
+    const storageKeys = ['oai_device_id', 'oai-device-id', 'oai_deviceId', 'oaiDeviceId'];
+
+    for (const key of storageKeys) {
+      const stored = window.localStorage.getItem(key);
+      if (stored) {
+        return stored;
+      }
+    }
+
+    return this.readCookie('oai_device_id') || this.readCookie('oai-device-id');
+  }
+
+  readCookie(name) {
+    const pattern = new RegExp(`(?:^|; )${name.replace(/([.$?*|{}()\[\]\\\/\+^])/g, '\\$1')}=([^;]*)`);
+    const match = document.cookie.match(pattern);
+    return match ? decodeURIComponent(match[1]) : null;
+  }
 }
 
-async function getDeviceId() {
-  const storageKeys = [
-    'oai_device_id',
-    'oai-device-id',
-    'oai_deviceId',
-    'oaiDeviceId'
-  ];
+class ConversationClient {
+  static CONVERSATION_ENDPOINT = id => `https://chatgpt.com/backend-api/conversation/${id}`;
 
-  for (const key of storageKeys) {
-    const value = window.localStorage.getItem(key);
-    if (value) {
-      return value;
+  constructor(authManager) {
+    this.authManager = authManager;
+  }
+
+  async fetchConversation(conversationId) {
+    const [accessToken, deviceId] = await Promise.all([
+      this.authManager.getAccessToken(),
+      this.authManager.getDeviceId()
+    ]);
+
+    if (!accessToken) {
+      throw new Error('Missing access token. Please ensure you are logged in.');
+    }
+
+    const headers = new Headers({
+      accept: 'application/json',
+      authorization: `Bearer ${accessToken}`,
+      'x-openai-assistant-app-id': 'chat.openai.com'
+    });
+
+    if (deviceId) {
+      headers.set('oai-device-id', deviceId);
+    }
+
+    const response = await fetch(ConversationClient.CONVERSATION_ENDPOINT(conversationId), {
+      method: 'GET',
+      credentials: 'include',
+      headers
+    });
+
+    if (!response.ok) {
+      throw new Error(`Conversation request failed: ${response.status}`);
+    }
+
+    return response.json();
+  }
+}
+
+class BackgroundBridge {
+  static MESSAGE_TYPE = 'CHATGPT_SAVE_DOWNLOAD_REQUEST';
+
+  requestDownload(format, conversation) {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage(
+        {
+          type: BackgroundBridge.MESSAGE_TYPE,
+          payload: { format, conversation }
+        },
+        response => {
+          const runtimeError = chrome.runtime.lastError;
+          if (runtimeError) {
+            reject(new Error(runtimeError.message));
+            return;
+          }
+
+          if (!response?.ok) {
+            reject(new Error(response?.error || 'Download failed.'));
+            return;
+          }
+
+          resolve(response);
+        }
+      );
+    });
+  }
+}
+
+class ChatGPTSaveApp {
+  constructor() {
+    this.authManager = new AuthManager();
+    this.conversationClient = new ConversationClient(this.authManager);
+    this.bridge = new BackgroundBridge();
+    this.ui = new DownloadUI(format => this.handleDownload(format));
+  }
+
+  init() {
+    this.ui.init();
+  }
+
+  async handleDownload(format) {
+    try {
+      const conversationId = ConversationLocator.currentConversationId();
+      if (!conversationId) {
+        throw new Error('Unable to determine conversation id from URL.');
+      }
+
+      const conversation = await this.conversationClient.fetchConversation(conversationId);
+      if (!conversation) {
+        throw new Error('Conversation payload was empty.');
+      }
+
+      await this.bridge.requestDownload(format, conversation);
+    } catch (error) {
+      console.warn('ChatGPT Save: failed to prepare download.', error);
     }
   }
-
-  const cookieDeviceId = readCookie('oai_device_id') || readCookie('oai-device-id');
-  if (cookieDeviceId) {
-    return cookieDeviceId;
-  }
-
-  return null;
 }
 
-function readCookie(name) {
-  const matcher = new RegExp(`(?:^|; )${name.replace(/([.$?*|{}()\[\]\\\/\+^])/g, '\\$1')}=([^;]*)`);
-  const match = document.cookie.match(matcher);
-  return match ? decodeURIComponent(match[1]) : null;
-}
+new ChatGPTSaveApp().init();
