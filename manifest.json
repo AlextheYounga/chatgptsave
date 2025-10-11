@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ChatGPT Save",
-  "description": "Save conversations from ChatGPT web UI.",
+  "description": "Save conversations in Markdown or JSON from the ChatGPT web UI.",
   "version": "0.1.0",
   "action": {
     "default_title": "ChatGPT Save"

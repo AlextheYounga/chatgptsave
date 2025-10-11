@@ -1,8 +1,11 @@
 {
   "name": "chatgptsave",
   "version": "1.0.0",
-  "description": "Save a conversation on ChatGPT web",
+  "description": "Chrome extension for saving conversations in Markdown or JSON from the ChatGPT web UI.",
   "main": "index.js",
+  "repository": {
+	"url": "https://github.com/AlextheYounga/chatgptsave"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
