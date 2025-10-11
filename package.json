@@ -1,0 +1,19 @@
+{
+  "name": "chatgptsave",
+  "version": "1.0.0",
+  "description": "Save a conversation on ChatGPT web",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "save",
+    "chat",
+    "openai",
+    "chatgpt",
+    "conversation",
+    "thread"
+  ],
+  "author": "Alex Younger",
+  "license": "MIT"
+}
