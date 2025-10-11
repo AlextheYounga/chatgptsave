@@ -9,11 +9,19 @@
   "permissions": [
     "webRequest",
     "webRequestBlocking",
-    "storage"
+    "storage",
+    "downloads"
   ],
   "background": {
     "service_worker": "background.js"
   },
+  "content_scripts": [
+    {
+      "matches": ["https://chatgpt.com/*"],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ],
   "host_permissions": [
     "https://chatgpt.com/*"
   ]
