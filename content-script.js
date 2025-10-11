@@ -6,6 +6,8 @@ const DROPDOWN_ID = 'chatgpt-save-download-dropdown';
 let activeDropdown = null;
 let activeAnchor = null;
 let detachDocumentHandlers = null;
+let accessTokenCache = null;
+let accessTokenPromise = null;
 
 init();
 
@@ -223,11 +225,168 @@ function positionDropdown(anchor, dropdown) {
   dropdown.style.left = `${rect.right + scrollX - dropdown.offsetWidth}px`;
 }
 
-function handleDownloadSelection(option) {
-  chrome.runtime.sendMessage({
-    type: 'CHATGPT_SAVE_DOWNLOAD_REQUEST',
-    payload: {
-      format: option
+async function handleDownloadSelection(format) {
+  try {
+    const conversationId = extractConversationIdFromLocation();
+    if (!conversationId) {
+      throw new Error('Unable to determine conversation id from URL.');
     }
+
+    const conversation = await fetchConversation(conversationId);
+    if (!conversation || typeof conversation !== 'object') {
+      throw new Error('Conversation payload was empty.');
+    }
+
+    chrome.runtime.sendMessage(
+      {
+        type: 'CHATGPT_SAVE_DOWNLOAD_REQUEST',
+        payload: {
+          format,
+          conversation
+        }
+      },
+      response => {
+        const runtimeError = chrome.runtime.lastError;
+        if (runtimeError) {
+          console.warn('ChatGPT Save: download request error.', runtimeError.message);
+          return;
+        }
+
+        if (!response?.ok) {
+          console.warn('ChatGPT Save: download failed.', response?.error);
+        }
+      }
+    );
+  } catch (error) {
+    console.warn('ChatGPT Save: failed to prepare download.', error);
+  }
+}
+
+function extractConversationIdFromLocation() {
+  const url = new URL(window.location.href);
+
+  // Typical path: /c/<conversationId>
+  const segments = url.pathname.split('/').filter(Boolean);
+  const conversationIndex = segments.indexOf('c');
+  if (conversationIndex !== -1 && segments.length > conversationIndex + 1) {
+    return segments[conversationIndex + 1];
+  }
+
+  if (segments.length >= 1) {
+    const candidate = segments[segments.length - 1];
+    if (isUuid(candidate)) {
+      return candidate;
+    }
+  }
+
+  const searchParams = url.searchParams;
+  const queryConversation = searchParams.get('conversationId') || searchParams.get('conversation_id');
+  if (queryConversation) {
+    return queryConversation;
+  }
+
+  return null;
+}
+
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
+async function fetchConversation(conversationId) {
+  const endpoint = `https://chatgpt.com/backend-api/conversation/${conversationId}`;
+  const [accessToken, deviceId] = await Promise.all([
+    getAccessToken(),
+    getDeviceId()
+  ]);
+
+  if (!accessToken) {
+    throw new Error('Missing access token. Please ensure you are logged in.');
+  }
+
+  const headers = new Headers({
+    accept: 'application/json',
+    authorization: `Bearer ${accessToken}`,
+    'x-openai-assistant-app-id': 'chat.openai.com'
   });
+
+  if (deviceId) {
+    headers.set('oai-device-id', deviceId);
+  }
+
+  const response = await fetch(endpoint, {
+    method: 'GET',
+    credentials: 'include',
+    headers
+  });
+
+  if (!response.ok) {
+    throw new Error(`Conversation request failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+async function getAccessToken() {
+  if (accessTokenCache) {
+    return accessTokenCache;
+  }
+
+  if (!accessTokenPromise) {
+    accessTokenPromise = fetch('https://chatgpt.com/api/auth/session', {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        accept: 'application/json'
+      }
+    })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`Session request failed: ${response.status}`);
+        }
+        return response.json();
+      })
+      .then(data => {
+        const token = data?.accessToken || null;
+        if (!token) {
+          throw new Error('Session response missing access token.');
+        }
+        accessTokenCache = token;
+        return token;
+      })
+      .catch(error => {
+        accessTokenPromise = null;
+        throw error;
+      });
+  }
+
+  return accessTokenPromise;
+}
+
+async function getDeviceId() {
+  const storageKeys = [
+    'oai_device_id',
+    'oai-device-id',
+    'oai_deviceId',
+    'oaiDeviceId'
+  ];
+
+  for (const key of storageKeys) {
+    const value = window.localStorage.getItem(key);
+    if (value) {
+      return value;
+    }
+  }
+
+  const cookieDeviceId = readCookie('oai_device_id') || readCookie('oai-device-id');
+  if (cookieDeviceId) {
+    return cookieDeviceId;
+  }
+
+  return null;
+}
+
+function readCookie(name) {
+  const matcher = new RegExp(`(?:^|; )${name.replace(/([.$?*|{}()\[\]\\\/\+^])/g, '\\$1')}=([^;]*)`);
+  const match = document.cookie.match(matcher);
+  return match ? decodeURIComponent(match[1]) : null;
 }

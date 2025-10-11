@@ -7,9 +7,6 @@
     "default_title": "ChatGPT Save"
   },
   "permissions": [
-    "webRequest",
-    "webRequestBlocking",
-    "storage",
     "downloads"
   ],
   "background": {
