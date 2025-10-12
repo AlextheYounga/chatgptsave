@@ -28,8 +28,11 @@ npm run build
 # Check if build was successful
 if [ $? -ne 0 ]; then
     echo "Error: Build failed. Push aborted."
-    exit 1
+    exit 1s
 fi
+
+git add .
+git commit --amend --no-edit
 
 echo "Build successful. Proceeding with push..."
 exit 0
