@@ -1,0 +1,35 @@
+#!/bin/bash
+
+# Pre-push hook that runs npm run build before pushing
+# This ensures the extension is built before any code is pushed
+
+echo "Running pre-push hook..."
+
+# Check if package.json exists
+if [ ! -f "package.json" ]; then
+    echo "Error: package.json not found. Make sure you're in the project root directory."
+    exit 1
+fi
+
+# Check if node_modules exists, if not run npm install
+if [ ! -d "node_modules" ]; then
+    echo "node_modules not found. Running npm install..."
+    npm install
+    if [ $? -ne 0 ]; then
+        echo "Error: npm install failed"
+        exit 1
+    fi
+fi
+
+# Run the build command
+echo "Building the project..."
+npm run build
+
+# Check if build was successful
+if [ $? -ne 0 ]; then
+    echo "Error: Build failed. Push aborted."
+    exit 1
+fi
+
+echo "Build successful. Proceeding with push..."
+exit 0
