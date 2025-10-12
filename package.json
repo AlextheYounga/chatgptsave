@@ -4,10 +4,10 @@
   "description": "Chrome extension for saving conversations in Markdown or JSON from the ChatGPT web UI.",
   "main": "index.js",
   "repository": {
-	"url": "https://github.com/AlextheYounga/chatgptsave"
+    "url": "https://github.com/AlextheYounga/chatgptsave"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "vite build"
   },
   "keywords": [
     "save",
@@ -18,5 +18,11 @@
     "thread"
   ],
   "author": "Alex Younger",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "turndown": "^7.2.1"
+  },
+  "devDependencies": {
+    "vite": "^6.3.6"
+  }
 }

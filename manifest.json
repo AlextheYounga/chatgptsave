@@ -19,7 +19,8 @@
 		"downloads"
 	],
 	"background": {
-		"service_worker": "background.js"
+		"service_worker": "dist/background.js",
+		"type": "module"
 	},
 	"content_scripts": [
 		{
@@ -27,7 +28,7 @@
 				"https://chatgpt.com/*"
 			],
 			"js": [
-				"content-script.js"
+				"dist/content-script.js"
 			],
 			"run_at": "document_idle"
 		}
