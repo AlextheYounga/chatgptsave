@@ -31,8 +31,5 @@ if [ $? -ne 0 ]; then
     exit 1s
 fi
 
-git add .
-git commit --amend --no-edit
-
 echo "Build successful. Proceeding with push..."
 exit 0

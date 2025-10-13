@@ -29,7 +29,7 @@ Effortlessly capture any ChatGPT conversation as a tidy JSON payload or a ready-
 2. Unzip it somewhere easy to find.
 3. Open Chrome and go to `chrome://extensions`.
 4. Toggle **Developer mode** on (top-right).
-5. Click **Load unpacked**, choose this folder, and confirm.
+5. Click **Load unpacked**, upload the  `dist/` folder, and confirm.
 6. Pin the “ChatGPT Save” icon if you want it handy in the toolbar.
 
 ## Usage
