@@ -2,6 +2,8 @@
 
 Effortlessly capture any ChatGPT conversation as a tidy JSON payload or a ready-to-share Markdown transcript—right from the conversation view.
 
+[Chrome Store](https://chromewebstore.google.com/detail/foahkgfpiabpdcmijmiodidmekdbghcd?utm_source=item-share-cb)
+
 <img src="./docs/images/chatgptsave.jpg" width="300" height="300" alt="ChatGPT Save logo" />
 
 ![Extension UI](./docs/images/chatgptsave-ui.jpg)
