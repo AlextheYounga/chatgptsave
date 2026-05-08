@@ -19,9 +19,6 @@
   ],
   "author": "Alex Younger",
   "license": "MIT",
-  "dependencies": {
-    "turndown": "^7.2.1"
-  },
   "devDependencies": {
     "vite": "^6.3.6"
   }
