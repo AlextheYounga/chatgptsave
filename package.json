@@ -1,6 +1,6 @@
 {
   "name": "chatgptsave",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Chrome extension for saving conversations in Markdown or JSON from the ChatGPT web UI.",
   "main": "index.js",
   "repository": {
